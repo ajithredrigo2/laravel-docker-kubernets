@@ -4,6 +4,7 @@ metadata:
   name: laravel-deployment
   labels:
     app: laravel-app
+    namespace: laravel-namespace
 spec:
   replicas: 3
   selector:
