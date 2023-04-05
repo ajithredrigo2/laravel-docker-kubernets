@@ -1,0 +1,43 @@
+version: "3.7"
+services:
+  app:
+    build:
+      args:
+        user: ubuntu
+        uid: 1000
+      context: ./
+      dockerfile: Dockerfile
+    image: laravel
+    container_name: laravel-app
+    restart: unless-stopped
+    working_dir: /var/www/html/Laravel-Docker/demo
+    ports:
+      - 8000:80
+    volumes:
+      - ./:/var/www/html/Laravel-Docker/demo
+      - ./docker-compose/apache:/etc/apache2/sites-enabled/
+    networks:
+      - laravel
+
+  db:
+    image: mysql:8.0
+    container_name: laravel-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+#      MYSQL_USER: ${DB_USERNAME}
+      SERVICE_TAGS: dev
+      SERVICE_NAME: mysql
+    ports:
+      - "3307:3306"
+    volumes:
+      - ./docker-compose/mysql:/docker-entrypoint-initdb.d
+#      - mysql8:/var/lib/mysql/
+    networks:
+     - laravel
+
+networks:
+  laravel:
+    driver: bridge
