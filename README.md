@@ -12,7 +12,7 @@ To allow for a streamlined development process and facilitate application debugg
 # Prerequisites
 ### Install Docker and Docker Compose: 
     You need to have Docker and Docker Compose installed on your local machine. Docker is used to build and run the Docker images, and Docker Compose is used to manage the containers.
-    [I'm an inline-style link](https://docs.docker.com/compose/install/linux/#install-the-plugin-manually)
+    [a link](https://docs.docker.com/compose/install/linux/#install-the-plugin-manually)
 
 ### Kubernetes cluster: 
     You need to have access to a Kubernetes cluster to deploy the application. You can use a managed Kubernetes service like Google Kubernetes Engine (GKE), Amazon Elastic Kubernetes Service (EKS), or Microsoft Azure Kubernetes Service (AKS), or you can set up your own Kubernetes cluster using tools like kops, kubeadm, or Rancher.
