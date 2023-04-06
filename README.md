@@ -11,25 +11,26 @@ To allow for a streamlined development process and facilitate application debugg
 
 # Prerequisites
 ### Install Docker and Docker Compose: 
-You need to have Docker and Docker Compose installed on your local machine. Docker is used to build and run the Docker images, and Docker Compose is used to manage the containers.
+    You need to have Docker and Docker Compose installed on your local machine. Docker is used to build and run the Docker images, and Docker Compose is used to manage the containers.
+    https://docs.docker.com/compose/install/linux/#install-the-plugin-manually
 
 ### Kubernetes cluster: 
-You need to have access to a Kubernetes cluster to deploy the application. You can use a managed Kubernetes service like Google Kubernetes Engine (GKE), Amazon Elastic Kubernetes Service (EKS), or Microsoft Azure Kubernetes Service (AKS), or you can set up your own Kubernetes cluster using tools like kops, kubeadm, or Rancher.
+    You need to have access to a Kubernetes cluster to deploy the application. You can use a managed Kubernetes service like Google Kubernetes Engine (GKE), Amazon Elastic Kubernetes Service (EKS), or Microsoft Azure Kubernetes Service (AKS), or you can set up your own Kubernetes cluster using tools like kops, kubeadm, or Rancher.
 
 ### Install kubectl: 
-You need to have the kubectl command-line tool installed on your local machine to interact with the Kubernetes cluster.
+    You need to have the kubectl command-line tool installed on your local machine to interact with the Kubernetes cluster.
 
 ### Docker registry: 
-You need to have a Docker registry to store the Docker images. You can use a public registry like Docker Hub, or you can set up your own private registry using tools like Harbor or Nexus.
+    You need to have a Docker registry to store the Docker images. You can use a public registry like Docker Hub, or you can set up your own private registry using tools like Harbor or Nexus.
 
 ### Laravel application: 
-You need to have a Laravel application that you want to deploy. The application should be containerized using Docker, and the Docker image should be stored in the Docker registry.
+    You need to have a Laravel application that you want to deploy. The application should be containerized using Docker, and the Docker image should be stored in the Docker registry.
 
 ### Kubernetes manifests: 
-You need to have Kubernetes manifests that describe how to deploy the Laravel application. The manifests should include a deployment, a service, and any other required resources like secrets or config maps.
+    You need to have Kubernetes manifests that describe how to deploy the Laravel application. The manifests should include a deployment, a service, and any other required resources like secrets or config maps.
 
 ### Environment variables: 
-You need to define any environment variables required by the Laravel application, like database credentials, API keys, or other configuration values. These can be defined in the Kubernetes manifests or using a separate configuration tool like Kubernetes ConfigMaps or Secrets.
+    You need to define any environment variables required by the Laravel application, like database credentials, API keys, or other configuration values. These can be defined in the Kubernetes manifests or using a separate configuration tool like Kubernetes ConfigMaps or Secrets.
 
 # Step 1 — Obtaining the Demo Application
 To get started, we’ll fetch the demo Laravel application from its Github repository. We’re interested in the tutorial-01 branch, which contains the basic Laravel application we’ve created in the first guide of this series.
@@ -38,7 +39,7 @@ To obtain the application code that is compatible with this tutorial, download r
 
 ```
 cd ~
-curl -L https://github.com/ajithredrigo2/Laravel-Docker/archive/test.zip -o laravel.zip
+curl -L https://github.com/ajithredrigo2/laravel-docker-kubernets/archive/test.zip -o laravel.zip
 ```
 We’ll need the unzip command to unpack the application code. In case you haven’t installed this package before, do so now with:
 
@@ -50,11 +51,11 @@ sudo apt install unzip
 Now, unzip the contents of the application and rename the unpacked directory for easier access:
 ```
 unzip laravel.zip
-sudo mv Laravel-Docker-test Laravel-Docker
+sudo mv laravel-docker-kubernets-test laravel-docker-kubernets
 ```
 Navigate to the laravel directory:
 ```
-cd Laravel-Docker
+cd laravel-docker-kubernets
 ```
 In the next step, we’ll create a .env configuration file to set up the application.
 
@@ -143,7 +144,7 @@ RUN mkdir -p /home/$user/.composer && \
     chown -R $user:$user /home/$user
 
 # Set working directory
-WORKDIR /var/www
+WORKDIR /var/www/html/laravel-docker-kubernets
 
 USER $user
 ```
@@ -176,9 +177,9 @@ Copy the following Apache configuration to that file:
 ```
 <VirtualHost *:80>
 
-  DocumentRoot /var/www/html/Laravel-Docker/public/
+  DocumentRoot /var/www/html/laravel-docker-kubernets/public/
 
-  <Directory /var/www/html/Laravel-Docker/>
+  <Directory /var/www/html/laravel-docker-kubernets/>
     Options Indexes FollowSymLinks
     AllowOverride All
     Require all granted
@@ -276,11 +277,11 @@ Copy the following service definition under your services node, inside the docke
     image: laravel
     container_name: laravel-app
     restart: unless-stopped
-    working_dir: /var/www/html/Laravel-Docker
+    working_dir: /var/www/html/laravel-docker-kubernets
     ports:
       - 8000:80
     volumes:
-      - ./:/var/www/html/Laravel-Docker
+      - ./:/var/www/html/laravel-docker-kubernets
       - ./docker-compose/apache:/etc/apache2/sites-enabled/
     networks:
       - laravel
@@ -343,11 +344,11 @@ services:
     image: laravel
     container_name: laravel-app
     restart: unless-stopped
-    working_dir: /var/www/html/Laravel-Docker
+    working_dir: /var/www/html/laravel-docker-kubernets
     ports:
       - 8000:80
     volumes:
-      - ./:/var/www/html/Laravel-Docker
+      - ./:/var/www/html/laravel-docker-kubernets
       - ./docker-compose/apache:/etc/apache2/sites-enabled/
     networks:
       - laravel
@@ -416,7 +417,7 @@ Step 9/12 : RUN useradd -G www-data,root -u $uid -d /home/$user $user
 Step 10/12 : RUN mkdir -p /home/$user/.composer &&     chown -R $user:$user /home/$user
  ---> Using cache
  ---> eec0846b2473
-Step 11/12 : WORKDIR /var/www/html/Laravel-Docker/demo
+Step 11/12 : WORKDIR /var/www/html/laravel-docker-kubernets
  ---> Using cache
  ---> bda202b3577b
 Step 12/12 : USER $user
