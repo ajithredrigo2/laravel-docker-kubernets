@@ -1,4 +1,4 @@
-# Dockerize a Laravel Application
+# Deploying a Laravel Application using Docker & Kubernets
 
 To containerize an application refers to the process of adapting an application and its components in order to be able to run it in lightweight environments known as containers. Such environments are isolated and disposable, and can be leveraged for developing, testing, and deploying applications to production.
 
