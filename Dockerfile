@@ -30,6 +30,6 @@ RUN mkdir -p /home/$user/.composer && \
     chown -R $user:$user /home/$user
 
 # Set working directory
-WORKDIR /var/www/html/Laravel-Docker/demo
+WORKDIR /var/www/html/laravel-docker-kubernets
 
 USER $user

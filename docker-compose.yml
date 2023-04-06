@@ -10,12 +10,12 @@ services:
     image: laravel
     container_name: laravel-app
     restart: unless-stopped
-    working_dir: /var/www/html/Laravel-Docker/demo
+    working_dir: /var/www/html/laravel-docker-kubernets
     ports:
       - 8000:80
     volumes:
-      - ./:/var/www/html/Laravel-Docker/demo
-      - ./docker-compose/apache:/etc/apache2/sites-enabled/
+      - ./:/var/www/html/laravel-docker-kubernets
+      - ./docker-compose/apache/:/etc/apache2/sites-enabled/
     networks:
       - laravel
 

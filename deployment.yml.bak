@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: laravel-deployment
+  labels:
+    app: laravel-app
+    namespace: default
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: laravel-app
+  template:
+    metadata:
+      labels:
+        app: laravel-app
+    spec:
+      containers:
+        - name: laravel
+          image: ajithredrigo2/laravel:laravel
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: laravel-storage
+              mountPath: /home/ubuntu/Laravel-Docker/storage
+      volumes:
+        - name: laravel-storage
+          emptyDir: {}
