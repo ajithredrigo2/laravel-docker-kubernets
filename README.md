@@ -1,36 +1,29 @@
 # Deploying a Laravel Application using Docker & Kubernets
 
-To containerize an application refers to the process of adapting an application and its components in order to be able to run it in lightweight environments known as containers. Such environments are isolated and disposable, and can be leveraged for developing, testing, and deploying applications to production.
+Deploying a Laravel application using Docker and Kubernetes is an efficient and scalable way to manage your application's infrastructure. Docker allows you to create containerized environments for your application, while Kubernetes provides tools for managing and scaling those containers.
 
-In this guide, we’ll use Docker Compose to containerize a Laravel application for development. When you’re finished, you’ll have a demo Laravel application running on three separate service containers:
+To get started, you'll need to create a Docker image of your Laravel application. This can be done by creating a Dockerfile that specifies the dependencies and configuration for your application. Once the Docker image is created, it can be deployed to a Kubernetes cluster.
 
-An app service running PHP7.4-apache;
-A db service running MySQL 8.0;
-An apache service that uses the app service to parse PHP code before serving the Laravel application to the final user.
-To allow for a streamlined development process and facilitate application debugging, we’ll keep application files in sync by using shared volumes. We’ll also see how to use docker-compose exec commands to run Composer and Artisan on the app container.
+In Kubernetes, you'll create a deployment object that specifies how many instances of your containerized application should be running at any given time. You can also define a service object that provides a stable IP address and DNS name for your application.
 
 # Prerequisites
 ### Install Docker and Docker Compose: 
-    You need to have Docker and Docker Compose installed on your local machine. Docker is used to build and run the Docker images, and Docker Compose is used to manage the containers.
-    [a link](https://docs.docker.com/compose/install/linux/#install-the-plugin-manually)
+You need to have [Docker](https://docs.docker.com/engine/install/ubuntu/) and [Docker Compose](https://docs.docker.com/compose/install/linux/#install-the-plugin-manually) installed on your local machine. Docker is used to build and run the Docker images, and Docker Compose is used to manage the containers.
 
 ### Kubernetes cluster: 
-    You need to have access to a Kubernetes cluster to deploy the application. You can use a managed Kubernetes service like Google Kubernetes Engine (GKE), Amazon Elastic Kubernetes Service (EKS), or Microsoft Azure Kubernetes Service (AKS), or you can set up your own Kubernetes cluster using tools like kops, kubeadm, or Rancher.
+You need to have access to a Kubernetes cluster to deploy the application. You can use a managed Kubernetes service like Google Kubernetes Engine (GKE), Amazon Elastic Kubernetes Service (EKS), or Microsoft Azure Kubernetes Service (AKS), or you can set up your own Kubernetes cluster using tools like kops, kubeadm, or Rancher.
 
 ### Install kubectl: 
-    You need to have the kubectl command-line tool installed on your local machine to interact with the Kubernetes cluster.
-
-### Docker registry: 
-    You need to have a Docker registry to store the Docker images. You can use a public registry like Docker Hub, or you can set up your own private registry using tools like Harbor or Nexus.
+You need to have the [Kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/) command-line tool installed on your local machine to interact with the Kubernetes cluster.
 
 ### Laravel application: 
-    You need to have a Laravel application that you want to deploy. The application should be containerized using Docker, and the Docker image should be stored in the Docker registry.
+You need to have a Laravel application that you want to deploy. The application should be containerized using Docker, and the Docker image should be stored in the Docker registry.
 
 ### Kubernetes manifests: 
-    You need to have Kubernetes manifests that describe how to deploy the Laravel application. The manifests should include a deployment, a service, and any other required resources like secrets or config maps.
+You need to have Kubernetes manifests that describe how to deploy the Laravel application. The manifests should include a deployment, a service, and any other required resources like secrets or config maps.
 
 ### Environment variables: 
-    You need to define any environment variables required by the Laravel application, like database credentials, API keys, or other configuration values. These can be defined in the Kubernetes manifests or using a separate configuration tool like Kubernetes ConfigMaps or Secrets.
+You need to define any environment variables required by the Laravel application, like database credentials, API keys, or other configuration values. These can be defined in the Kubernetes manifests or using a separate configuration tool like Kubernetes ConfigMaps or Secrets.
 
 # Step 1 — Obtaining the Demo Application
 To get started, we’ll fetch the demo Laravel application from its Github repository. We’re interested in the tutorial-01 branch, which contains the basic Laravel application we’ve created in the first guide of this series.
