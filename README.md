@@ -10,9 +10,19 @@ An apache service that uses the app service to parse PHP code before serving the
 To allow for a streamlined development process and facilitate application debugging, we’ll keep application files in sync by using shared volumes. We’ll also see how to use docker-compose exec commands to run Composer and Artisan on the app container.
 
 # Prerequisites
-Access to an Ubuntu 22.04 local machine or development server as a non-root user with sudo privileges. If you’re using a remote server, it’s advisable to have an active firewall installed. To set these up, please refer to our Initial Server Setup Guide for Ubuntu 22.04.
-Docker installed on your server, following Steps 1 and 2 of How To Install and Use Docker on Ubuntu 22.04.
-Docker Compose installed on your server, following Step 1 of How To Install and Use Docker Compose on Ubuntu 22.04.
+Docker and Docker Compose: You need to have Docker and Docker Compose installed on your local machine. Docker is used to build and run the Docker images, and Docker Compose is used to manage the containers.
+
+Kubernetes cluster: You need to have access to a Kubernetes cluster to deploy the application. You can use a managed Kubernetes service like Google Kubernetes Engine (GKE), Amazon Elastic Kubernetes Service (EKS), or Microsoft Azure Kubernetes Service (AKS), or you can set up your own Kubernetes cluster using tools like kops, kubeadm, or Rancher.
+
+kubectl: You need to have the kubectl command-line tool installed on your local machine to interact with the Kubernetes cluster.
+
+Docker registry: You need to have a Docker registry to store the Docker images. You can use a public registry like Docker Hub, or you can set up your own private registry using tools like Harbor or Nexus.
+
+Laravel application: You need to have a Laravel application that you want to deploy. The application should be containerized using Docker, and the Docker image should be stored in the Docker registry.
+
+Kubernetes manifests: You need to have Kubernetes manifests that describe how to deploy the Laravel application. The manifests should include a deployment, a service, and any other required resources like secrets or config maps.
+
+Environment variables: You need to define any environment variables required by the Laravel application, like database credentials, API keys, or other configuration values. These can be defined in the Kubernetes manifests or using a separate configuration tool like Kubernetes ConfigMaps or Secrets.
 
 # Step 1 — Obtaining the Demo Application
 To get started, we’ll fetch the demo Laravel application from its Github repository. We’re interested in the tutorial-01 branch, which contains the basic Laravel application we’ve created in the first guide of this series.
