@@ -19,11 +19,8 @@ You need to have the [Kubectl](https://kubernetes.io/docs/tasks/tools/install-ku
 ### Laravel application: 
 You need to have a Laravel application that you want to deploy. The application should be containerized using Docker, and the Docker image should be stored in the Docker registry.
 
-### Kubernetes manifests: 
-You need to have Kubernetes manifests that describe how to deploy the Laravel application. The manifests should include a deployment, a service, and any other required resources like secrets or config maps.
-
-### Environment variables: 
-You need to define any environment variables required by the Laravel application, like database credentials, API keys, or other configuration values. These can be defined in the Kubernetes manifests or using a separate configuration tool like Kubernetes ConfigMaps or Secrets.
+### Install Jenkins
+you need to install [Jenkins](https://www.jenkins.io/doc/book/installing/linux/), which is a continuous integration (CI) server that supports a wide range of tools and technologies. Adopting a CI process ensures that all developers' working copies of code are regularly merged into a shared trunk. Once a change is committed to the repository, the product is automatically rebuilt and tested.
 
 # Step 1 — Obtaining the Demo Application
 To get started, we’ll fetch the demo Laravel application from its Github repository. We’re interested in the tutorial-01 branch, which contains the basic Laravel application we’ve created in the first guide of this series.
@@ -338,11 +335,8 @@ services:
     container_name: laravel-app
     restart: unless-stopped
     working_dir: /var/www/html/laravel-docker-kubernets
-    ports:
-      - 8000:80
     volumes:
       - ./:/var/www/html/laravel-docker-kubernets
-      - ./docker-compose/apache:/etc/apache2/sites-enabled/
     networks:
       - laravel
 
@@ -363,6 +357,19 @@ services:
     networks:
      - laravel
 
+  nginx:
+    image: nginx:alpine
+    container_name: laravel-nginx
+    restart: unless-stopped
+    ports:
+      - "8000:80"
+    volumes:
+      - ./:/var/www/html/laravel-docker-kubernets
+      - ./docker-compose/nginx:/etc/nginx/conf.d
+    networks:
+      - laravel
+
+
 networks:
   laravel:
     driver: bridge
@@ -376,7 +383,7 @@ Build the app image with the following command:
 ```
 docker-compose build app
 ```
-This command might take a few minutes to complete. You’ll see output similar to this:
+This command might take a few minutes to complete. You’ll see output similar to this:       
 
 ### Output
 ```
@@ -428,158 +435,416 @@ docker-compose up -d
 ```
 Creating laravel-db    ... done
 Creating laravel-app   ... done
+Creating laravel-nginx ... done
 ```
-This will run your containers in the background. To show information about the state of your active services, run:
-```
-docker-compose ps
-```
-You’ll see output like this:
 
+# Step 7 Create a Kubernetes deployment to run Laravel application
+This deployment.yaml file creates a Kubernetes deployment with one replica that runs the my-app-image Docker image. The deployment specifies the container port to expose, as well as environment variables for the PostgreSQL database connection details.
+
+### deployment.yml
+```
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: laravel-deployment
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: laravel-app
+  template:
+    metadata:
+      labels:
+        app: laravel-app
+    spec:
+      containers:
+      - name: laravel-app
+        image: ajithredrigo2/laravel:laravel
+        ports:
+        - containerPort: 8000
+        env:
+        - name: DB_HOST
+          value: mysql
+        - name: DB_PORT
+          value: "3306"
+        - name: DB_DATABASE
+          value: laravel
+        - name: DB_USERNAME
+          value: root
+        - name: DB_PASSWORD
+          value: Ama$@In*a6dP
+``` 
+
+# Step 8 Create a Kubernetes service to expose Laravel application
+This service.yaml file creates a Kubernetes service of type LoadBalancer that exposes the container port of the laravel-app deployment and assigns an external IP address.
+### service.yml
+```
+apiVersion: v1
+kind: Service
+metadata:
+  name: laravel-service
+spec:
+  selector:
+    app: laravel-app
+  ports:
+  - name: http
+    port: 8000
+  type: LoadBalancer
+```
+# Step 8 Apply Deployment and Service
+Apply the Kubernetes deployment and service YAML files using the following command:
+```
+kubectl apply -f deployment.yaml
+kubectl apply -f service.yaml
+```
+Now the laravel application deployed to the kubernets cluster and expose it to intenet.
+
+### Step 9 Setup Jenkins Pipeline
+After install jenkins, Create a group for jenkins and docker using the following command,
+```
+sudo usermod -a -G docker jenkins
+```
+This will used to ecexute docker commands in jenkins shell.
+
+Create permission for jenkins to project folder
+```
+sudo chown -R jenkins:www-data /var/www/html/laravel-docker-kubernets
+```
+Create SecretFile access in jenkins to kubernets
+```
+    1. Download config file from
+        cd ~/.kube/
+    2. Set permission for client key 
+        sudo chown jenkins ~/.minikube/profiles/minikube/client.key
+    3. Insert client.key to Jenkins
+        Go to Jenkins --> Manage --> Credentials --> GLobal --> Add --> SecretFile
+```
+
+Now create pipeline script in Jenkins
+```
+pipeline {
+    agent {
+        node {
+            label "master"
+            customWorkspace "/var/www/html/laravel-docker-kubernets"
+        }
+    }
+    environment {
+        KUBECONFIG = credentials('kubeconfig')
+        DOCKER_REGISTRY = 'registry.hub.docker.com'
+        DOCKER_USERNAME = 'ajithredrigo2'
+        // DOCKER_PASSWORD = 'Redrigo@j2548'
+        KUBE_NAMESPACE = 'default'
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                git url: 'https://github.com/ajithredrigo2/laravel-docker-kubernets.git', branch: 'main', credentialsId: 'jenkins'
+            }
+        }
+        
+        stage('Docker Build') {
+            steps {
+                sh 'docker-compose build app'
+            }
+        }
+        
+        stage('Run tests') {
+            steps {
+                sh "php vendor/bin/phpunit"
+            }
+        }
+        
+        stage('Docker Tag and Push') {
+            steps {
+                sh 'docker login -u ajithredrigo2 -p $DOCKER_PASSWORD'
+                sh 'docker tag laravel ajithredrigo2/laravel:laravel'
+                sh 'docker push ajithredrigo2/laravel:laravel'
+            }
+        }
+        
+        stage('Docker Up') {
+            steps {
+                sh "docker-compose up -d"
+                sh "docker-compose exec -T app php artisan optimize:clear"
+            }
+        }
+       
+        stage('Deploy to Kubernetes') {
+            steps {
+                script {
+                    try {
+                        sh "envsubst < deployment.yml | kubectl apply -f -"
+                        sh "envsubst < service.yml | kubectl apply -f -"
+                        sh "kubectl rollout status deployment laravel-deployment -n ${KUBE_NAMESPACE}"
+                    } catch (Exception e) {
+                        currentBuild.result = 'FAILURE'
+                        sh "kubectl rollout undo deployment laravel-deployment -n ${KUBE_NAMESPACE}"
+                        throw e
+                    }
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            script {
+                if (currentBuild.result == 'FAILURE') {
+                    sh "kubectl rollout status deployment laravel-deployment -n ${KUBE_NAMESPACE}"
+                    sh "kubectl rollout undo deployment laravel-deployment -n ${KUBE_NAMESPACE}"
+                }
+            }
+        }
+    }
+}
+```
+In the Build stage, the build steps are defined. This could include docker compiling source code, generating documentation, or creating a build artifact.
+
+In the Test stage, the tests are defined. This could include unit tests, integration tests, or acceptance tests.
+
+In the Deploy stage, the deployment steps are defined. This could include deploying the build artifact to a staging environment, running database migrations, or configuring load balancers.
+
+In the Post stage, a deployed application revert back to old revision if any error occurs in previous line.
+
+After build the pipeline the output might be
 ### Output
 ```
-   Name                  Command               State                          Ports
-----------------------------------------------------------------------------------------------------------
-laravel-app   docker-php-entrypoint apac ...   Up      0.0.0.0:8000->80/tcp,:::8000->80/tcp
-laravel-db    docker-entrypoint.sh mysqld      Up      0.0.0.0:3307->3306/tcp,:::3307->3306/tcp, 33060/tcp
-```
-Your environment is now up and running, but we still need to execute a couple commands to finish setting up the application. You can use the docker-compose exec command to execute commands in the service containers, such as an ls -l to show detailed information about files in the application directory:
-```
-docker-compose exec app ls -l
-```
-### Output
-```
-total 364
--rw-r--r--  1 ubuntu   ubuntu    901 Mar  7 09:35 Dockerfile
--rw-rw-r--  1 ubuntu   ubuntu   3958 Apr 12  2022 README.md
-drwxrwxr-x  7 ubuntu   ubuntu   4096 Apr 12  2022 app
--rwxr-xr-x  1 ubuntu   ubuntu   1686 Apr 12  2022 artisan
-drwxrwxr-x  3 ubuntu   ubuntu   4096 Apr 12  2022 bootstrap
--rw-rw-r--  1 ubuntu   ubuntu   1745 Apr 12  2022 composer.json
--rw-rw-r--  1 ubuntu   ubuntu 283765 Mar  7 09:31 composer.lock
-drwxrwxr-x  2 ubuntu   ubuntu   4096 Apr 12  2022 config
-drwxrwxr-x  5 ubuntu   ubuntu   4096 Apr 12  2022 database
--rw-rw-r--  1 ubuntu   ubuntu   1162 Mar  7 20:40 ddagent-install.log
-drwxrwxr-x  4 ubuntu   ubuntu   4096 Mar  7 08:29 docker-compose
--rw-r--r--  1 ubuntu   ubuntu    955 Mar  7 09:56 docker-compose.yml
--rw-rw-r--  1 ubuntu   ubuntu    473 Apr 12  2022 package.json
--rw-rw-r--  1 ubuntu   ubuntu   1202 Apr 12  2022 phpunit.xml
-drwxrwxr-x  2 ubuntu   ubuntu   4096 Mar  7 09:52 public
-drwxrwxr-x  6 ubuntu   ubuntu   4096 Apr 12  2022 resources
-drwxrwxr-x  2 ubuntu   ubuntu   4096 Apr 12  2022 routes
--rw-rw-r--  1 ubuntu   ubuntu    569 Apr 12  2022 server.php
-drwxrwxrwx  5 www-data ubuntu   4096 Apr 12  2022 storage
-drwxrwxr-x  4 ubuntu   ubuntu   4096 Apr 12  2022 tests
-drwxrwxr-x 42 ubuntu   ubuntu   4096 Mar  7 09:32 vendor
--rw-rw-r--  1 ubuntu   ubuntu    559 Apr 12  2022 webpack.mix.js
-```
-We’ll now run composer install to install the application dependencies:
-```
-docker-compose exec app rm -rf vendor composer.lock
-docker-compose exec app composer install
-```
-You’ll see output like this:
+Started by user jenkins
+[Pipeline] Start of Pipeline
+[Pipeline] node
+Running on Jenkins in /var/lib/jenkins/workspace/laravel-docker-kubernets
+[Pipeline] {
+[Pipeline] ws
+Running in /var/www/html/laravel-docker-kubernets
+[Pipeline] {
+[Pipeline] withCredentials
+Masking supported pattern matches of $KUBECONFIG
+[Pipeline] {
+[Pipeline] withEnv
+[Pipeline] {
+[Pipeline] stage
+[Pipeline] { (Checkout)
+[Pipeline] git
+The recommended git tool is: NONE
+using credential jenkins
+ > git rev-parse --resolve-git-dir /var/www/html/laravel-docker-kubernets/.git # timeout=10
+Fetching changes from the remote Git repository
+ > git config remote.origin.url https://github.com/ajithredrigo2/laravel-docker-kubernets.git # timeout=10
+Fetching upstream changes from https://github.com/ajithredrigo2/laravel-docker-kubernets.git
+ > git --version # timeout=10
+ > git --version # 'git version 2.25.1'
+using GIT_SSH to set credentials 
+Verifying host key using known hosts file
+You're using 'Known hosts file' strategy to verify ssh host keys, but your known_hosts file does not exist, please go to 'Manage Jenkins' -> 'Configure Global Security' -> 'Git Host Key Verification Configuration' and configure host key verification.
+ > git fetch --tags --force --progress -- https://github.com/ajithredrigo2/laravel-docker-kubernets.git +refs/heads/*:refs/remotes/origin/* # timeout=10
+ > git rev-parse refs/remotes/origin/main^{commit} # timeout=10
+Checking out Revision c8a91d17866cb93475ceebd97ede814ba5c2b0ec (refs/remotes/origin/main)
+ > git config core.sparsecheckout # timeout=10
+ > git checkout -f c8a91d17866cb93475ceebd97ede814ba5c2b0ec # timeout=10
+ > git branch -a -v --no-abbrev # timeout=10
+ > git branch -D main # timeout=10
+ > git checkout -b main c8a91d17866cb93475ceebd97ede814ba5c2b0ec # timeout=10
+Commit message: "ingress"
+ > git rev-list --no-walk c8a91d17866cb93475ceebd97ede814ba5c2b0ec # timeout=10
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Docker Build)
+[Pipeline] sh
++ docker-compose build app
+Building app
+Step 1/12 : FROM php:7.4-fpm
+ ---> 38f2b691dcb8
+Step 2/12 : ARG user
+ ---> Using cache
+ ---> d32d580a198d
+Step 3/12 : ARG uid
+ ---> Using cache
+ ---> 611f9c39229c
+Step 4/12 : RUN apt-get update && apt-get install -y     git     curl     libpng-dev     libonig-dev     libxml2-dev     zip     unzip
+ ---> Using cache
+ ---> a347bacec3d8
+Step 5/12 : RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+ ---> Using cache
+ ---> 5f8278dad545
+Step 6/12 : RUN docker-php-ext-install pdo pdo_mysql mbstring mysqli exif pcntl bcmath gd
+ ---> Using cache
+ ---> e3bdec99d19f
+Step 7/12 : RUN curl --silent --show-error "https://getcomposer.org/installer" | php -- --install-dir=/usr/local/bin --filename=composer
+ ---> Using cache
+ ---> 2e045777e6ce
+Step 8/12 : COPY --from=composer:1.10.1 /usr/bin/composer /usr/bin/composer
+ ---> Using cache
+ ---> 0861b71f47c0
+Step 9/12 : RUN useradd -G www-data,root -u $uid -d /home/$user $user
+ ---> Using cache
+ ---> 2c5dc556beaf
+Step 10/12 : RUN mkdir -p /home/$user/.composer &&     chown -R $user:$user /home/$user
+ ---> Using cache
+ ---> 9b283b1290bc
+Step 11/12 : WORKDIR /var/www/html/laravel-docker-kubernets
+ ---> Using cache
+ ---> 2e66f8cf877b
+Step 12/12 : USER $user
+ ---> Using cache
+ ---> 7bea978cd832
 
-### Output
-```
-No composer.lock file present. Updating dependencies to latest instead of installing from lock file. See https://getcomposer.org/install for more information.
-. . .
-Lock file operations: 89 installs, 0 updates, 0 removals
-  - Locking doctrine/inflector (2.0.4)
-  - Locking doctrine/instantiator (1.4.1)
-  - Locking doctrine/lexer (1.2.3)
-  - Locking dragonmantank/cron-expression (v2.3.1)
-  - Locking egulias/email-validator (2.1.25)
-  - Locking facade/flare-client-php (1.9.1)
-  - Locking facade/ignition (1.18.1)
-  - Locking facade/ignition-contracts (1.0.2)
-  - Locking fideloper/proxy (4.4.1)
-  - Locking filp/whoops (2.14.5)
-. . .
-Writing lock file
-Installing dependencies from lock file (including require-dev)
-Package operations: 89 installs, 0 updates, 0 removals
-  - Downloading doctrine/inflector (2.0.4)
-  - Downloading doctrine/lexer (1.2.3)
-  - Downloading dragonmantank/cron-expression (v2.3.1)
-  - Downloading symfony/polyfill-php80 (v1.25.0)
-  - Downloading symfony/polyfill-php72 (v1.25.0)
-  - Downloading symfony/polyfill-mbstring (v1.25.0)
-  - Downloading symfony/var-dumper (v4.4.39)
-  - Downloading symfony/deprecation-contracts (v2.5.1)
-. . .
-Generating optimized autoload files
-> Illuminate\Foundation\ComposerScripts::postAutoloadDump
-> @php artisan package:discover --ansi
-Discovered Package: facade/ignition
-Discovered Package: fideloper/proxy
-Discovered Package: laravel/tinker
-Discovered Package: nesbot/carbon
-Discovered Package: nunomaduro/collision
-Package manifest generated successfully.
-```
-The last thing we need to do before testing the application is to generate a unique application key with the artisan Laravel command-line tool. This key is used to encrypt user sessions and other sensitive data:
-```
-docker-compose exec app php artisan key:generate
+Successfully built 7bea978cd832
+Successfully tagged laravel:latest
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Run tests)
+[Pipeline] sh
++ php vendor/bin/phpunit
+PHPUnit 9.6.6 by Sebastian Bergmann and contributors.
 
-```
-### Output
-```
-Application key set successfully.
-```
-Now go to your browser and access your server’s domain name or IP address on port 8000:
-```
-http://server_domain_or_IP:8000
-```
-### Note: In case you are running this demo on your local machine, use http://localhost:8000 to access the application from your browser.
+..                                                                  2 / 2 (100%)
 
-You’ll see a page like this:
+Time: 00:00.067, Memory: 20.00 MB
 
-Demo Laravel Application
+OK (2 tests, 2 assertions)
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Docker Tag and Push)
+[Pipeline] sh
++ docker login -u ajithredrigo2 -p Redrigo@j2548
+WARNING! Using --password via the CLI is insecure. Use --password-stdin.
+WARNING! Your password will be stored unencrypted in /var/lib/jenkins/.docker/config.json.
+Configure a credential helper to remove this warning. See
+https://docs.docker.com/engine/reference/commandline/login/#credentials-store
 
-You can use the logs command to check the logs generated by your services:
+Login Succeeded
+[Pipeline] sh
++ docker tag laravel ajithredrigo2/laravel:laravel
+[Pipeline] sh
++ docker push ajithredrigo2/laravel:laravel
+The push refers to repository [docker.io/ajithredrigo2/laravel]
+9bf121a508e9: Preparing
+00d5038b895e: Preparing
+a01648a1f601: Preparing
+98711257115c: Preparing
+2fc79ae99e03: Preparing
+0e87d9b8d675: Preparing
+860bd024b846: Preparing
+d6ed42ec7c6e: Preparing
+5e65a6c61859: Preparing
+d78098596d78: Preparing
+7c314756ee72: Preparing
+89982c6135ad: Preparing
+91fd2792fa74: Preparing
+08cc615b0242: Preparing
+44148371c697: Preparing
+797a7c0590e0: Preparing
+f60117696410: Preparing
+ec4a38999118: Preparing
+0e87d9b8d675: Waiting
+860bd024b846: Waiting
+d6ed42ec7c6e: Waiting
+5e65a6c61859: Waiting
+d78098596d78: Waiting
+7c314756ee72: Waiting
+797a7c0590e0: Waiting
+89982c6135ad: Waiting
+f60117696410: Waiting
+91fd2792fa74: Waiting
+ec4a38999118: Waiting
+08cc615b0242: Waiting
+44148371c697: Waiting
+9bf121a508e9: Layer already exists
+2fc79ae99e03: Layer already exists
+a01648a1f601: Layer already exists
+00d5038b895e: Layer already exists
+98711257115c: Layer already exists
+5e65a6c61859: Layer already exists
+0e87d9b8d675: Layer already exists
+d6ed42ec7c6e: Layer already exists
+860bd024b846: Layer already exists
+d78098596d78: Layer already exists
+08cc615b0242: Layer already exists
+7c314756ee72: Layer already exists
+89982c6135ad: Layer already exists
+91fd2792fa74: Layer already exists
+44148371c697: Layer already exists
+f60117696410: Layer already exists
+797a7c0590e0: Layer already exists
+ec4a38999118: Layer already exists
+laravel: digest: sha256:cc9f033f82f1eab69b52db41aa85b35fa240d559a113d4545d927c85d48e9006 size: 4081
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Docker Up)
+[Pipeline] sh
++ docker-compose up -d
+laravel-app is up-to-date
+laravel-nginx is up-to-date
+laravel-db is up-to-date
+[Pipeline] sh
++ docker-compose exec -T app php artisan optimize:clear
+Cached events cleared!
+Compiled views cleared!
+Application cache cleared!
+Route cache cleared!
+Configuration cache cleared!
+Compiled services and packages files removed!
+Caches cleared successfully!
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Deploy to Kubernetes)
+[Pipeline] script
+[Pipeline] {
+[Pipeline] sh
++ envsubst
++ kubectl apply -f -
+deployment.apps/laravel-deployment configured
+[Pipeline] sh
++ envsubst
++ kubectl apply -f -
+service/laravel-service unchanged
+[Pipeline] sh
++ kubectl rollout status deployment laravel-deployment -n default
+Waiting for deployment "laravel-deployment" rollout to finish: 1 out of 3 new replicas have been updated...
+Waiting for deployment "laravel-deployment" rollout to finish: 1 out of 3 new replicas have been updated...
+Waiting for deployment "laravel-deployment" rollout to finish: 1 out of 3 new replicas have been updated...
+Waiting for deployment "laravel-deployment" rollout to finish: 2 out of 3 new replicas have been updated...
+Waiting for deployment "laravel-deployment" rollout to finish: 2 out of 3 new replicas have been updated...
+Waiting for deployment "laravel-deployment" rollout to finish: 2 out of 3 new replicas have been updated...
+Waiting for deployment "laravel-deployment" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "laravel-deployment" rollout to finish: 1 old replicas are pending termination...
+deployment "laravel-deployment" successfully rolled out
+[Pipeline] }
+[Pipeline] // script
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Declarative: Post Actions)
+[Pipeline] script
+[Pipeline] {
+[Pipeline] }
+[Pipeline] // script
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] }
+[Pipeline] // withEnv
+[Pipeline] }
+[Pipeline] // withCredentials
+[Pipeline] }
+[Pipeline] // ws
+[Pipeline] }
+[Pipeline] // node
+[Pipeline] End of Pipeline
+Finished: SUCCESS
 ```
-docker-compose logs app
-```
-```
-Attaching to laravel-app
-. . .
-laravel-app | [Wed Mar 08 15:20:17.800929 2023] [mpm_prefork:notice] [pid 1] AH00163: Apache/2.4.54 (Debian) PHP/7.4.33 configured -- resuming normal operations
-laravel-app | [Wed Mar 08 15:20:17.801085 2023] [core:notice] [pid 1] AH00094: Command line: 'apache2 -D FOREGROUND'
-laravel-app | 172.26.0.1 - - [08/Mar/2023:16:19:20 +0000] "GET / HTTP/1.1" 200 18745 "-" "curl/7.68.0" Gecko/20100101 Firefox/89.0"
-```
-If you want to pause your Docker Compose environment while keeping the state of all its services, run:
-```
-docker-compose pause
-```
-### Output
-```
-Pausing laravel-db    ... done
-Pausing laravel-app   ... done
-```
-You can then resume your services with:
-```
-docker-compose unpause
-```
-### Output
-```
-Unpausing laravel-app   ... done
-Unpausing laravel-db    ... done
-```
-To shut down your Docker Compose environment and remove all of its containers, networks, and volumes, run:
-```
-docker-compose down
-```
-### Output
-```
-Stopping laravel-app ... done
-Stopping laravel-db  ... done
-Removing laravel-app ... done
-Removing laravel-db  ... done
-Removing network laravel
-```
-For an overview of all Docker Compose commands, please check the Docker Compose command-line reference.
-
+    
 # Conclusion
-In this guide, we’ve set up a Docker environment with three containers using Docker Compose to define our infrastructure in a YAML file.
+In conclusion, deploying a Laravel application using Docker and Kubernetes is a powerful and efficient way to manage the deployment of your application in a production environment.
 
-From this point on, you can work on your Laravel application without needing to install and set up a local web server for development and testing. Moreover, you’ll be working with a disposable environment that can be easily replicated and distributed, which can be helpful while developing your application and also when moving towards a production environment.
+Docker allows you to package your application into a container that includes all its dependencies and configurations, making it easy to deploy and run in any environment. Kubernetes then allows you to manage and orchestrate the deployment of your containers, providing features like scaling, rolling updates, and self-healing.
+
+To deploy a Laravel application using Docker and Kubernetes, you'll need to create a Docker image of your application, configure a Kubernetes deployment, and create a Kubernetes service to expose your application to the internet. You can then use Kubernetes to manage the deployment and scaling of your application as traffic increases or decreases.
+
+Overall, using Docker and Kubernetes to deploy a Laravel application provides a scalable, reliable, and efficient solution that allows you to focus on developing your application rather than managing the infrastructure.

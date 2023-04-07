@@ -24,14 +24,12 @@ services:
       MYSQL_DATABASE: ${DB_DATABASE}
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
       MYSQL_PASSWORD: ${DB_PASSWORD}
-#      MYSQL_USER: ${DB_USERNAME}
       SERVICE_TAGS: dev
       SERVICE_NAME: mysql
     ports:
       - "3307:3306"
     volumes:
       - ./docker-compose/mysql:/docker-entrypoint-initdb.d
-#      - mysql8:/var/lib/mysql/
     networks:
      - laravel
   
